@@ -1,350 +1,261 @@
-// method should be getSnap(std::stri
-#include "Spinnaker.h"
-#include "SpinGenApi/SpinnakerGenApi.h"
+#include "stdafx.h"
+
+#include "./headers/FlyCapture2.h"
+#include <iomanip>
 #include <iostream>
 #include <sstream>
+#include "time.hpp"
+#include <unistd.h>
 
-using namespace Spinnaker;
-using namespace Spinnaker::GenApi;
-using namespace Spinnaker::GenICam;
+using namespace FlyCapture2;
 using namespace std;
 
-// Helper Function That will sleep in both windows and linux
+class imgData{
+    private:
+        string pathToImg;
 
-void SleepyWrapper(int milliseconds){
-    #if defined WIN32 || defined _WIN32 || defined WIN64 || defined _WIN64
-        Sleep(milliseconds); // milliseconds for windows
-    #else
-        usleep(1000 * milliseconds); //microseconds for linux
-    #endif
-}
-
-class ImageEventHandlerImpl : public ImageEventHandler
-{
-  public:
-    // The constructor retrieves the serial number and initializes the image
-    // counter to 0.
-    ImageEventHandlerImpl(CameraPtr pCam, unsigned int snap_count)
-    {
-        // Retrieve device serial number
-        INodeMap& nodeMap = pCam->GetTLDeviceNodeMap();
-
-        m_deviceSerialNumber = "";
-        CStringPtr ptrDeviceSerialNumber = nodeMap.GetNode("DeviceSerialNumber");
-        if (IsAvailable(ptrDeviceSerialNumber) && IsReadable(ptrDeviceSerialNumber))
-        {
-            m_deviceSerialNumber = ptrDeviceSerialNumber->GetValue();
+    public:
+        imgData(string path){
+            imgData::pathToImg = path;
         }
 
-        // Initialize image counter to 0
-        m_imageCnt = 0;
+        int setImgPath(string path){
+            imgData::pathToImg = path;
 
-        mk_numImages = snap_count;
-
-        // Release reference to camera
-        pCam = nullptr;
-    }
-    ~ImageEventHandlerImpl()
-    {
-    }
-
-    // This method defines an image event. In it, the image that triggered the
-    // event is converted and saved before incrementing the count. Please see
-    // Acquisition_CSharp example for more in-depth comments on the acquisition
-    // of images.
-    void OnImageEvent(ImagePtr image)
-    {
-        // Save a maximum of 10 images
-        if (m_imageCnt < mk_numImages)
-        {
-            cout << "Image event occurred..." << endl;
-
-            // Check image retrieval status
-            if (image->IsIncomplete())
-            {
-                cout << "Image incomplete with image status " << image->GetImageStatus() << "..." << endl << endl;
-            }
-            else
-            {
-                // Print image information
-                cout << "Grabbed image " << m_imageCnt << ", width = " << image->GetWidth()
-                     << ", height = " << image->GetHeight() << endl;
-
-                // Convert image to mono 8
-                ImagePtr convertedImage = image->Convert(PixelFormat_Mono8, HQ_LINEAR);
-
-                // Create a unique filename and save image
-                ostringstream filename;
-
-                filename << "./images/";
-                if (m_deviceSerialNumber != "")
-                {
-                    filename << m_deviceSerialNumber.c_str() << "-";
-                }
-                filename << m_imageCnt << ".jpg";
-
-                convertedImage->Save(filename.str().c_str());
-
-                cout << "Image saved at " << filename.str() << endl << endl;
-
-                // Increment image counter
-                m_imageCnt++;
-            }
+            return 0;
         }
-    }
 
-    // Getter for image counter
-    int getImageCount()
-    {
-        return m_imageCnt;
-    }
+        string getImgPath(){
+            return pathToImg;
+        }
 
-    // Getter for maximum images
-    int getMaxImages()
-    {
-        return mk_numImages;
-    }
-
-  private:
-    unsigned int mk_numImages;
-    unsigned int m_imageCnt;
-    string m_deviceSerialNumber;
 };
 
-int ConfigureImageEvents(CameraPtr pCam, ImageEventHandlerImpl*& imageEventHandler, unsigned int snap_count)
+void PrintFormat7Capabilities(Format7Info fmt7Info)
 {
-    int result = 0;
-
-    try
-    {
-        imageEventHandler = new ImageEventHandlerImpl(pCam, snap_count);
-        pCam->RegisterEventHandler(*imageEventHandler);
-    }
-    catch (Spinnaker::Exception& e)
-    {
-        cout << "Error: " << e.what() << endl;
-        result = -1;
-    }
-
-    return result;
+    cout << "Max image pixels: (" << fmt7Info.maxWidth << ", "
+         << fmt7Info.maxHeight << ")" << endl;
+    cout << "Image Unit size: (" << fmt7Info.imageHStepSize << ", "
+         << fmt7Info.imageVStepSize << ")" << endl;
+    cout << "Offset Unit size: (" << fmt7Info.offsetHStepSize << ", "
+         << fmt7Info.offsetVStepSize << ")" << endl;
+    cout << "Pixel format bitfield: 0x" << fmt7Info.pixelFormatBitField << endl;
 }
 
-int WaitForImages(ImageEventHandlerImpl*& imageEventHandler)
+void PrintError(Error error) { error.PrintErrorTrace(); }
+
+int getSnap(string path, unsigned int snapCount, Mode mode, imgData &imgdata, PixelFormat camera_pixel_format,PixelFormat save_pixel_format)
 {
-    int result = 0;
+    
 
-    try
+    const Mode k_fmt7Mode = mode; //Camera MODE
+    const PixelFormat k_fmt7PixFmt = camera_pixel_format;
+    const int k_numImages = snapCount;
+
+    Error error;
+
+    BusManager busMgr;
+    unsigned int numCameras;
+    error = busMgr.GetNumOfCameras(&numCameras);
+    if (error != PGRERROR_OK)
     {
-        const int sleepDuration = 200; // in milliseconds
-
-        cout << endl << "\t### Starting Grabbing Snapps ###" << endl;
-        while (imageEventHandler->getImageCount() < imageEventHandler->getMaxImages())
-        {
-
-            SleepyWrapper(sleepDuration);
-        }
-        cout << endl << "\t### Grabbing Images Completed ###" << endl;
-    }
-    catch (Spinnaker::Exception& e)
-    {
-        cout << "Error: " << e.what() << endl;
-        result = -1;
-    }
-
-    return result;
-}
-
-int ResetImageEvents(CameraPtr pCam, ImageEventHandlerImpl*& imageEventHandler)
-{
-    int result = 0;
-
-    try
-    {
-        
-        pCam->UnregisterEventHandler(*imageEventHandler);
-
-        // Delete image event handler (because it is a pointer)
-        delete imageEventHandler;
-
-        cout << "Image events unregistered..." << endl << endl;
-    }
-    catch (Spinnaker::Exception& e)
-    {
-        cout << "Error: " << e.what() << endl;
-        result = -1;
-    }
-
-    return result;
-}
-
-int PrintDeviceInfo(INodeMap& nodeMap)
-{
-    int result = 0;
-
-    cout << endl << "*** DEVICE INFORMATION ***" << endl << endl;
-
-    try
-    {
-        FeatureList_t features;
-        CCategoryPtr category = nodeMap.GetNode("DeviceInformation");
-        if (IsAvailable(category) && IsReadable(category))
-        {
-            category->GetFeatures(features);
-
-            FeatureList_t::const_iterator it;
-            for (it = features.begin(); it != features.end(); ++it)
-            {
-                CNodePtr pfeatureNode = *it;
-                cout << pfeatureNode->GetName() << " : ";
-                CValuePtr pValue = (CValuePtr)pfeatureNode;
-                cout << (IsReadable(pValue) ? pValue->ToString() : "Node not readable");
-                cout << endl;
-            }
-        }
-        else
-        {
-            cout << "Device control information not available." << endl;
-        }
-    }
-    catch (Spinnaker::Exception& e)
-    {
-        cout << "Error: " << e.what() << endl;
-        result = -1;
-    }
-
-    return result;
-}
-
-int AcquireImages(
-    CameraPtr pCam,
-    INodeMap& nodeMap,
-    INodeMap& nodeMapTLDevice,
-    ImageEventHandlerImpl*& imageEventHandler)
-{
-    int result = 0;
-
-    cout << endl << endl << "*** IMAGE ACQUISITION ***" << endl << endl;
-
-    try
-    {
-        // Set acquisition mode to continuous
-        CEnumerationPtr ptrAcquisitionMode = nodeMap.GetNode("AcquisitionMode");
-        if (!IsAvailable(ptrAcquisitionMode) || !IsWritable(ptrAcquisitionMode))
-        {
-            cout << "Unable to set acquisition mode to continuous (node retrieval). Aborting..." << endl << endl;
-            return -1;
-        }
-
-        CEnumEntryPtr ptrAcquisitionModeContinuous = ptrAcquisitionMode->GetEntryByName("Continuous");
-        if (!IsAvailable(ptrAcquisitionModeContinuous) || !IsReadable(ptrAcquisitionModeContinuous))
-        {
-            cout << "Unable to set acquisition mode to continuous (enum entry retrieval). Aborting..." << endl << endl;
-            return -1;
-        }
-
-        int64_t acquisitionModeContinuous = ptrAcquisitionModeContinuous->GetValue();
-
-        ptrAcquisitionMode->SetIntValue(acquisitionModeContinuous);
-
-        cout << "Acquisition mode set to continuous..." << endl;
-
-        // Begin acquiring images
-        pCam->BeginAcquisition();
-
-        cout << "Acquiring images..." << endl;
-
-        // Retrieve images using image event handler
-        WaitForImages(imageEventHandler);
-
-        // End acquisition
-        pCam->EndAcquisition();
-    }
-    catch (Spinnaker::Exception& e)
-    {
-        cout << "Error: " << e.what() << endl;
-        result = -1;
-    }
-
-    return result;
-}
-
-int RunSingleCamera(CameraPtr pCam, unsigned int snap_count)
-{
-    int result = 0;
-    int err = 0;
-
-    try
-    {
-        // Retrieve TL device nodemap and print device information
-        INodeMap& nodeMapTLDevice = pCam->GetTLDeviceNodeMap();
-
-        result = PrintDeviceInfo(nodeMapTLDevice);
-
-        // Initialize camera
-        pCam->Init();
-
-        // Retrieve GenICam nodemap
-        INodeMap& nodeMap = pCam->GetNodeMap();
-
-        // Configure image events
-        ImageEventHandlerImpl* imageEventHandler;
-
-        err = ConfigureImageEvents(pCam, imageEventHandler, snap_count);
-        if (err < 0)
-        {
-            return err;
-        }
-
-        // Acquire images using the image event handler
-        result = result | AcquireImages(pCam, nodeMap, nodeMapTLDevice, imageEventHandler);
-
-        // Reset image events
-        result = result | ResetImageEvents(pCam, imageEventHandler);
-
-        // Deinitialize camera
-        pCam->DeInit();
-    }
-    catch (Spinnaker::Exception& e)
-    {
-        cout << "Error: " << e.what() << endl;
-        result = -1;
-    }
-
-    return result;
-}
-
-
-int getSnap(unsigned int snap_count){
-
-    int result = 0;
-
-    SystemPtr system = System::GetInstance();
-
-    //Get the list of cameras from the system
-    CameraList camList = system->GetCameras();
-
-    unsigned int numCameras = camList.GetSize();
-
-    //If no cameras available end
-    if( numCameras == 0 ){
-
-        camList.Clear();
-        system->ReleaseInstance();
-
-        cout << "No Cameras Found !!" << endl;
-
+        PrintError(error);
         return -1;
     }
 
-    //Snapping from each camera
-    for (unsigned int i = 0; i < numCameras; i++){
-        result = result | RunSingleCamera(camList.GetByIndex(i), snap_count);
+    cout << "Number of cameras detected: " << numCameras << endl;
+
+    if (numCameras < 1)
+    {
+        cout << "Insufficient number of cameras... Check camera connectivity !!" << endl;
+        imgdata.setImgPath("./warning.png");
+        return 0;
     }
 
-    camList.Clear();
+    PGRGuid guid;
+    error = busMgr.GetCameraFromIndex(0, &guid);
+    if (error != PGRERROR_OK)
+    {
+        PrintError(error);
+        return -1;
+    }    
 
-    system->ReleaseInstance();
+    // Connect to a camera
+	Camera cam;
+    error = cam.Connect(&guid);
+    if (error != PGRERROR_OK)
+    {
+        PrintError(error);
+        return -1;
+    }
 
-    return result;
-    
+    // Get the camera information
+    CameraInfo camInfo;
+    error = cam.GetCameraInfo(&camInfo);
+    if (error != PGRERROR_OK)
+    {
+        PrintError(error);
+        return -1;
+    }
+
+    // Query for available Format 7 modes
+    Format7Info fmt7Info;
+    bool supported;
+    fmt7Info.mode = k_fmt7Mode;
+    error = cam.GetFormat7Info(&fmt7Info, &supported);
+    if (error != PGRERROR_OK)
+    {
+        PrintError(error);
+        return -1;
+    }
+
+    cout << "############ Format Capabilities ##########" << endl;
+    PrintFormat7Capabilities(fmt7Info);
+
+    if ((k_fmt7PixFmt & fmt7Info.pixelFormatBitField) == 0)
+    {
+        // Pixel format not supported!
+        cout << "Pixel format is not supported" << endl;
+        return -1;
+    }
+
+    //Settings
+    Format7ImageSettings fmt7ImageSettings;
+    fmt7ImageSettings.mode = k_fmt7Mode;
+    fmt7ImageSettings.offsetX = 0;
+    fmt7ImageSettings.offsetY = 0;
+    fmt7ImageSettings.width = fmt7Info.maxWidth;
+    fmt7ImageSettings.height = fmt7Info.maxHeight;
+    fmt7ImageSettings.pixelFormat = k_fmt7PixFmt;
+
+    bool valid;
+    Format7PacketInfo fmt7PacketInfo;
+
+    // Validate the settings to make sure that they are valid
+    error = cam.ValidateFormat7Settings(
+        &fmt7ImageSettings, &valid, &fmt7PacketInfo);
+    if (error != PGRERROR_OK)
+    {
+        PrintError(error);
+        return -1;
+    }
+
+    if (!valid)
+    {
+        // Settings are not valid
+        cout << "Format7 settings are not valid" << endl;
+        return -1;
+    }
+
+    // Set the settings to the camera
+    error = cam.SetFormat7Configuration(
+        &fmt7ImageSettings, fmt7PacketInfo.recommendedBytesPerPacket);
+    if (error != PGRERROR_OK)
+    {
+        PrintError(error);
+        return -1;
+    }
+
+    // Start capturing images
+    error = cam.StartCapture();
+    if (error != PGRERROR_OK)
+    {
+        PrintError(error);
+        return -1;
+    }
+
+    // Retrieve frame rate property
+    Property frmRate;
+    frmRate.type = FRAME_RATE;
+    error = cam.GetProperty(&frmRate);
+    if (error != PGRERROR_OK)
+    {
+        PrintError(error);
+        return -1;
+    }
+
+    cout << "Frame rate is " << fixed << setprecision(2) << frmRate.absValue
+         << " fps" << endl;
+
+    cout << "Grabbing " << k_numImages << " images" << endl;
+
+    Image rawImage;
+    for (int imageCount = 0; imageCount < k_numImages; imageCount++)
+    {
+        // Retrieve an image
+        error = cam.RetrieveBuffer(&rawImage);
+        if (error != PGRERROR_OK)
+        {
+            PrintError(error);
+            continue;
+        }
+
+        cout << ".";
+
+        // Get the raw image dimensions
+        PixelFormat pixFormat;
+        unsigned int rows, cols, stride;
+        rawImage.GetDimensions(&rows, &cols, &stride, &pixFormat);
+
+        // Create a converted image
+        Image convertedImage;
+
+        // Convert the raw image
+        error = rawImage.Convert(save_pixel_format, &convertedImage);
+        if (error != PGRERROR_OK)
+        {
+            PrintError(error);
+            return -1;
+        }
+
+        // Create a unique filename
+
+        ostringstream filename;
+        filename << path << getCurrentTime() << "#" << camInfo.serialNumber << ".bmp";
+
+        // Save the image. If a file format is not passed in, then the file
+        // extension is parsed to attempt to determine the file format.
+        error = convertedImage.Save(filename.str().c_str());
+        if (error != PGRERROR_OK)
+        {
+            PrintError(error);
+            return -1;
+        }
+
+        imgdata.setImgPath(filename.str());
+        cout << imgdata.getImgPath() << endl;
+        
+    }
+
+    cout << endl;
+    cout << "Finished grabbing images" << endl;
+
+    // Stop capturing images
+    error = cam.StopCapture();
+    if (error != PGRERROR_OK)
+    {
+        cout << "stopcamer" << endl;
+        PrintError(error);
+        return -1;
+    }
+
+    // Disconnect the camera
+    error = cam.Disconnect();
+
+    while( error != PGRERROR_OK){ //wait for camera to dissconnect
+        error = cam.Disconnect();
+        sleep(1);
+    }
+
+    if (error != PGRERROR_OK)
+    {
+        cout << "disconnectcamer" << endl;
+        PrintError(error);
+        return 0;
+    }
+
+    cout << "Done!" << endl;
+    //cin.ignore();
+
+    return 0;
 }
