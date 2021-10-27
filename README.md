@@ -4,8 +4,9 @@
   <summary><h2 style="display: inline-block">Table of Contents</h2></summary>
   <ol>
     <li>
-      <a href="#about-the-project">About The Project</a>
+      <a href="#project-description">Project Description</a>
     </li>
+    <li><a href="#implementation">Implementation</a></li>
     <li>
       <a href="#getting-started">Getting Started</a>
       <ul>
@@ -18,9 +19,17 @@
   </ol>
 </details>
 
-## About The Project
+## Project Description
 
-This Project is to gather data from defect tracking process. Program will take inputs and will take a snap of the focused area of the fabric using the **camera 0** and will save it to the relevent folder for the defect according to the input.
+This project is a specific requirement for Intellisense Labs. They have undertaken a project to Automate the process of defect detection in fabrics. Going into bit more details in the textile industry Apparels must not have defects as an end product. But fabric a mass produced raw material comes in huge rolls of fabric sheets and they have different kinds of defects in random on the sheet. These defects should not at all cost go through the manufacturing process and end up in the end product as they will be rejected from the final inspections and worst case scenario end up as a defect product in the customers hands. There for factory's have taken messures to control these defects. Before the fabric is to be used for the manufacturing process it will go through an inspection for defects. This will be done by an inspector manually. Roll will be rolling on a board such that fabric sheet will be layed on an inclined table give any moment of time. Inspector will inspect the sheet with naked eye for defects. This could have lots of human errors not to mention the person lost in his own thought whilst looking at sheet of fabric without any change. Even when he finds a defect he will stop the rolls and confirms his find note in down. Which is also time consuming. As we can clearly see this process is inefficient even though it is very crucial. The Solution is an automated system which will look at the fabric using multiple cameras mounted on top of the fabric and detect defects in realtime and make relevant notes. For this process FabVis team has proposed an machine learning solution.
+
+The proposed machine learning solution requires a healthy dataset of accurate data of defects. This project is a solution to cater that requirement. Most efficient and reliable way to obtain such a data set is through the defect inspectors them selfs. They know how to detect the defects and what kind of defect they are. So the solution is to give them a system which will ease their day to day work whilst creating a healthy data set for the machine learning process.
+
+The inspector will be given a number pad, each number will be assigned to a defect. When he recognise a defect rather than taking notes of the defects, all the inspector have to do is to press the corrosponding number on the number pad for the corrosponding defect. The system will automatically generate his daily report for him whilst creating the data set.
+
+## Implementation
+
+Add implementation
 
 ## Getting Started
 
