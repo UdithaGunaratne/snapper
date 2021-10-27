@@ -29,7 +29,25 @@ The inspector will be given a number pad, each number will be assigned to a defe
 
 ## Implementation
 
-Add implementation
+### Capturing Images
+
+As per the requirement of the project this was the most important aspect of the project. FabVis team have opted for a **Grasshopper3 USB3 Flir camera** as their camera module. Their for building the data set using the same module was crucial. There for all the other hardware was picked such that they are in harmony with the camera module.
+
+  ![Grasshopper3 USB3](resources/grasshopper3_frontback_usb.png)
+
+Flir cameras have their own APIs to access the camera modules.
+  1) Spinnaker SDK
+  2) FlyCapture SDK
+
+Spinnaker SDK is recomended for USB3 or GigE vision cameras and FlyCapture SDK is used for USB2 or FIreWire cameras. Even though our camera is a USB3 camera FlyCapture SDK gave more options at the time and was compatible with USB3 also. There for we opted for FlyCapture SDK.
+
+With FlyCapture SDK there is few different mods of image capture. I have included samples for MOD_1 and MOD_2 below.
+
+![MODE_1](resources/MODE_!.bmp)
+<p align = "center">MODE_1</p>
+
+![MODE_2](resources/MODE_2.bmp)
+<p align = "center">MODE_2</p>
 
 ## Getting Started
 
